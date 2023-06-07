@@ -1,7 +1,9 @@
 use std::{io::BufRead, io::BufReader};
 use std::fs;
+use std::mem;
 use std::os::unix::process::CommandExt;
 use std::process::Command;
+use std::str::from_utf8;
 
 use anyhow::{anyhow, Result};
 use criterion::black_box;
@@ -10,10 +12,17 @@ use clap::Parser;
 mod bpf;
 use bpf::opensnoop::*;
 
+const PATH_SIZE: usize = 4096;
+
 #[derive(Parser)]
 struct Args {
     #[clap(required(true), help("Command run inside the sandbox."))]
     command: Vec<String>,
+}
+
+#[repr(C)]
+struct PathEvent {
+    path: [u8; PATH_SIZE],
 }
 
 fn is_lsm_bpf_available() -> Result<bool> {
@@ -49,6 +58,26 @@ pub extern "C" fn attach_tracer() {
     black_box(420);
 }
 
+fn event_handler(data: &[u8]) -> i32 {
+    if data.len() != mem::size_of::<PathEvent>() {
+        eprintln!(
+            "Invalid size {} != {}",
+            data.len(),
+            mem::size_of::<PathEvent>()
+        );
+
+        return 1;
+    }
+
+    let event = unsafe { &*(data.as_ptr() as *const PathEvent) };
+    let path = from_utf8(&event.path)
+        .expect("Path should be UTF-8 encoded");
+    // TODO: Fix double printing issue
+    println!("{} {}", path.len(), path);
+
+    return 0;
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
 
@@ -64,6 +93,15 @@ fn main() -> Result<()> {
 
     // Load BPF programs
     let mut skel = OpensnoopSkelBuilder::default().open()?.load()?;
+
+    // Add ring buffer and associated callback
+    let mut builder = libbpf_rs::RingBufferBuilder::new();
+    builder
+        .add(
+            skel.maps().events(),
+            move | data | { event_handler(data) }
+        )?;
+    let ring_buffer = builder.build()?;
    
     // Attach BPF programs
     skel.attach()?;
@@ -86,7 +124,10 @@ fn main() -> Result<()> {
             .pre_exec(enable_tracing)
             .spawn()?;
 
-        child.wait()?;
+        while child.try_wait()?.is_none() {
+            // Use reasonable duration to avoid busy waiting
+            ring_buffer.poll(core::time::Duration::from_millis(5))?;
+        }
     }
 
     Ok(())

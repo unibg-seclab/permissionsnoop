@@ -114,7 +114,7 @@ static int set_full_path(struct path *path, struct dentry *dentry,
   return 0;
 }
 
-void print_path(struct path *path, struct dentry *dentry) {
+void print_path(char *prefix, struct path *path, struct dentry *dentry) {
     int idx = 0;
     char *full_path = bpf_map_lookup_elem(&tmp_path, &idx);
     if (!full_path) {
@@ -124,64 +124,29 @@ void print_path(struct path *path, struct dentry *dentry) {
     // Retrieve the path of the access request
     int err = set_full_path(path, dentry, full_path);
     if (!err) {
-        bpf_printk("%s\n", full_path);
+        bpf_printk("%s: %s", prefix, full_path);
     }
 }
 
-SEC("lsm/path_unlink")
-int BPF_PROG(trace_unlink, const struct path *dir, struct dentry *dentry) {
+/*
+ * In the following we are using all the hook points where the bpf_d_path
+ * helper function is available according to the btf_allowlist_d_path variable
+ * https://github.com/torvalds/linux/blob/master/kernel/trace/bpf_trace.c#L920
+*/
+
+// SEC("lsm/file_permission")
+// int BPF_PROG(trace_file_permission, struct file *file, int mask) {
+//     if (is_traced()) {
+//         print_path("lsm/file_permission", &file->f_path, NULL);
+//     }
+
+//     return 0;
+// }
+
+SEC("lsm/inode_getattr")
+int BPF_PROG(trace_inode_getattr, const struct path *path) {
     if (is_traced()) {
-        print_path(dir, dentry);
-    }
-
-    return 0;
-}
-
-SEC("lsm/path_rmdir")
-int BPF_PROG(trace_rmdir, const struct path *dir, struct dentry *dentry) {
-    if (is_traced()) {
-        print_path(dir, dentry);
-    }
-
-    return 0;
-}
-
-SEC("lsm/path_mkdir")
-int BPF_PROG(trace_mkdir, const struct path *dir, struct dentry *dentry,
-	         umode_t mode) {
-    if (is_traced()) {
-        print_path(dir, dentry);
-    }
-}
-
-SEC("lsm/path_mknod")
-int BPF_PROG(trace_mknod, const struct path *dir, struct dentry *dentry,
-             umode_t mode, unsigned int dev) {
-    if (is_traced()) {
-        print_path(dir, dentry);
-    }
-
-    return 0;
-}
-
-SEC("lsm/path_link")
-int BPF_PROG(trace_link_dst, struct dentry *old_dentry,
-             const struct path *new_dir, struct dentry *new_dentry) {
-    if (is_traced()) {
-        // TODO: Trace src of the hardlink
-        print_path(new_dir, new_dentry);
-    }
-
-    return 0;
-}
-
-SEC("lsm/path_rename")
-int BPF_PROG(trace_rename,
-             const struct path *old_dir, struct dentry *old_dentry,
-             const struct path *new_dir, struct dentry *new_dentry) {
-  if (is_traced()) {
-        print_path(old_dir, old_dentry);
-        print_path(new_dir, new_dentry);
+        print_path("lsm/inode_getattr", path, NULL);
     }
 
     return 0;
@@ -190,18 +155,64 @@ int BPF_PROG(trace_rename,
 SEC("lsm/file_open")
 int BPF_PROG(trace_open, struct file *file, int mask) {
     if (is_traced()) {
-        print_path(&file->f_path, NULL);
+        print_path("lsm/file_open", &file->f_path, NULL);
     }
 
     return 0;
 }
 
-SEC("lsm/path_symlink") 
-int BPF_PROG(restrict_symlink, const struct path *dir, struct dentry *dentry,
-             const char *old_name) {
+// SEC("lsm/path_truncate")
+// int BPF_PROG(trace_truncate, const struct path *path) {
+//     if (is_traced()) {
+//         print_path("lsm/path_truncate", path, NULL);
+//     }
+
+//     return 0;
+// }
+
+SEC("fentry/vfs_truncate")
+int BPF_PROG(trace_vfs_truncate, const struct path *path, loff_t length) {
     if (is_traced()) {
-        // TODO: Trace src of the hardlink
-        print_path(dir, dentry);
+        print_path("fentry/vfs_truncate", path, NULL);
+    }
+
+    return 0;
+}
+
+SEC("fentry/vfs_fallocate")
+int BPF_PROG(trace_vfs_fallocate, struct file *file, int mode, loff_t offset,
+             loff_t len) {
+    if (is_traced()) {
+        print_path("fentry/vfs_fallocate", &file->f_path, NULL);
+    }
+
+    return 0;
+}
+
+SEC("fentry/dentry_open")
+int BPF_PROG(trace_dentry_open, const struct path *path, int flags,
+			 const struct cred *cred) {
+    if (is_traced()) {
+        print_path("fentry/dentry_open", path, NULL);
+    }
+
+    return 0;
+}
+
+SEC("fentry/vfs_getattr")
+int BPF_PROG(trace_vfs_getattr, const struct path *path, struct kstat *stat,
+		     u32 request_mask, unsigned int query_flags) {
+    if (is_traced()) {
+        print_path("fentry/vfs_getattr", path, NULL);
+    }
+
+    return 0;
+}
+
+SEC("fentry/filp_close")
+int BPF_PROG(trace_filp_close, struct file *filp, fl_owner_t id) {
+    if (is_traced()) {
+        print_path("fentry/filp_close", &filp->f_path, NULL);
     }
 
     return 0;

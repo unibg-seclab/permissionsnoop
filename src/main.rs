@@ -78,10 +78,11 @@ fn main() -> Result<()> {
     };
 
     // Run command to trace
-    let command = &args.command.join(" ");
+    let program = &args.command[0];
+    let arguments = &args.command[1..];
     unsafe {
-        let mut child = Command::new("sh")
-            .args(["-c", command])
+        let mut child = Command::new(program)
+            .args(arguments)
             .pre_exec(enable_tracing)
             .spawn()?;
 

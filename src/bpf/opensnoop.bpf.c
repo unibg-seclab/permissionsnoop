@@ -76,10 +76,8 @@ void BPF_PROG(delete_trace_on_exit, struct task_struct *child) {
 
 /* TRACING */
 
-// TODO: Use syscall kernel hooks to avoid LSM dependency (and issues with bpf_d_path)
 // TODO: Use ring buffer to send path events to user space
 // TODO: Attach the same function to multiple kernel hooks
-// TODO: Fix check of the path size
 
 bool is_traced() {
     struct task_struct *task = bpf_get_current_task_btf();

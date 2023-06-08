@@ -90,7 +90,6 @@ void BPF_PROG(delete_trace_on_exit, struct task_struct *child) {
 
 /* TRACING */
 
-// TODO: Add source of the event and potentially the length of the path
 // TODO: Attach the same function to multiple kernel hooks
 
 bool is_traced() {

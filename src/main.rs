@@ -2,7 +2,7 @@ use std::fs;
 use std::{io::BufRead, io::BufReader};
 use std::mem;
 use std::os::unix::process::CommandExt;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::str::from_utf8;
 
 use anyhow::{anyhow, Result};
@@ -127,6 +127,8 @@ fn main() -> Result<()> {
         let mut child = Command::new(program)
             .args(arguments)
             .pre_exec(enable_tracing)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .spawn()?;
 
         while child.try_wait()?.is_none() {

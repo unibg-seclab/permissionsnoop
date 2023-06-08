@@ -98,20 +98,6 @@ bool is_traced() {
     return is_traced != NULL;
 }
 
-void print_path(char *prefix, struct path *path) {
-    int idx = 0;
-    char *full_path = bpf_map_lookup_elem(&tmp_path, &idx);
-    if (!full_path) {
-        return;
-    }
-
-    // Retrieve the path of the access request
-    int len = bpf_d_path(path, full_path, PATH_SIZE);
-    if (len > 0) {
-        bpf_printk("%s: %s", prefix, full_path);
-    }
-}
-
 void send_path(char *prefix, struct path *path) {
     struct path_event *event = bpf_ringbuf_reserve(&events, sizeof(*event), 0);
 	if (!event) {
@@ -120,7 +106,9 @@ void send_path(char *prefix, struct path *path) {
 
     bpf_probe_read_kernel_str(event->src, SRC_SIZE, prefix);
     event->len = bpf_d_path(path, event->path, PATH_SIZE);
-    bpf_printk("%d %s", event->len, event->path);
+#ifdef DEBUG
+    bpf_printk("%s: %s", prefix, event->path);
+#endif /* DEBUG */
 	bpf_ringbuf_submit(event, 0);
 }
 
@@ -133,7 +121,6 @@ void send_path(char *prefix, struct path *path) {
 // SEC("lsm/file_permission")
 // int BPF_PROG(trace_file_permission, struct file *file, int mask) {
 //     if (is_traced()) {
-//         print_path("lsm/file_permission", &file->f_path);
 //         send_path("lsm/file_permission", &file->f_path);
 //     }
 
@@ -143,7 +130,6 @@ void send_path(char *prefix, struct path *path) {
 SEC("lsm/inode_getattr")
 int BPF_PROG(trace_inode_getattr, const struct path *path) {
     if (is_traced()) {
-        print_path("lsm/inode_getattr", path);
         send_path("lsm/inode_getattr", path);
     }
 
@@ -153,7 +139,6 @@ int BPF_PROG(trace_inode_getattr, const struct path *path) {
 SEC("lsm/file_open")
 int BPF_PROG(trace_open, struct file *file, int mask) {
     if (is_traced()) {
-        print_path("lsm/file_open", &file->f_path);
         send_path("lsm/file_open", &file->f_path);
     }
 
@@ -163,7 +148,6 @@ int BPF_PROG(trace_open, struct file *file, int mask) {
 // SEC("lsm/path_truncate")
 // int BPF_PROG(trace_truncate, const struct path *path) {
 //     if (is_traced()) {
-//         print_path("lsm/path_truncate", path);
 //         send_path("lsm/path_truncate", path);
 //     }
 
@@ -173,7 +157,6 @@ int BPF_PROG(trace_open, struct file *file, int mask) {
 SEC("fentry/vfs_truncate")
 int BPF_PROG(trace_vfs_truncate, const struct path *path, loff_t length) {
     if (is_traced()) {
-        print_path("fentry/vfs_truncate", path);
         send_path("fentry/vfs_truncate", path);
     }
 
@@ -184,7 +167,6 @@ SEC("fentry/vfs_fallocate")
 int BPF_PROG(trace_vfs_fallocate, struct file *file, int mode, loff_t offset,
              loff_t len) {
     if (is_traced()) {
-        print_path("fentry/vfs_fallocate", &file->f_path);
         send_path("fentry/vfs_fallocate", &file->f_path);
     }
 
@@ -195,7 +177,6 @@ SEC("fentry/dentry_open")
 int BPF_PROG(trace_dentry_open, const struct path *path, int flags,
 			 const struct cred *cred) {
     if (is_traced()) {
-        print_path("fentry/dentry_open", path);
         send_path("fentry/dentry_open", path);
     }
 
@@ -206,7 +187,6 @@ SEC("fentry/vfs_getattr")
 int BPF_PROG(trace_vfs_getattr, const struct path *path, struct kstat *stat,
 		     u32 request_mask, unsigned int query_flags) {
     if (is_traced()) {
-        print_path("fentry/vfs_getattr", path);
         send_path("fentry/vfs_getattr", path);
     }
 
@@ -216,7 +196,6 @@ int BPF_PROG(trace_vfs_getattr, const struct path *path, struct kstat *stat,
 SEC("fentry/filp_close")
 int BPF_PROG(trace_filp_close, struct file *filp, fl_owner_t id) {
     if (is_traced()) {
-        print_path("fentry/filp_close", &filp->f_path);
         send_path("fentry/filp_close", &filp->f_path);
     }
 

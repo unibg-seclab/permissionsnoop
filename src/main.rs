@@ -1,5 +1,5 @@
-use std::{io::BufRead, io::BufReader};
 use std::fs;
+use std::{io::BufRead, io::BufReader};
 use std::mem;
 use std::os::unix::process::CommandExt;
 use std::process::Command;
@@ -13,6 +13,7 @@ mod bpf;
 use bpf::opensnoop::*;
 
 const PATH_SIZE: usize = 4096;
+const SRC_SIZE: usize = 32;
 
 #[derive(Parser)]
 struct Args {
@@ -22,7 +23,9 @@ struct Args {
 
 #[repr(C)]
 struct PathEvent {
+    src: [u8; SRC_SIZE],
     path: [u8; PATH_SIZE],
+    len: u32,
 }
 
 fn is_lsm_bpf_available() -> Result<bool> {
@@ -70,10 +73,12 @@ fn event_handler(data: &[u8]) -> i32 {
     }
 
     let event = unsafe { &*(data.as_ptr() as *const PathEvent) };
+    let _src = from_utf8(&event.src)
+        .expect("Source should be UTF-8 encoded");
     let path = from_utf8(&event.path)
         .expect("Path should be UTF-8 encoded");
-    // TODO: Fix double printing issue
-    println!("{} {}", path.len(), path);
+    // Patch double printing issue
+    println!("{}", &path[..event.len as usize]);
 
     return 0;
 }

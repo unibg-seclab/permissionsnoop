@@ -99,7 +99,7 @@ fn event_handler(data: &[u8]) -> i32 {
     }
 
     let event = unsafe { &*(data.as_ptr() as *const PathEvent) };
-    let _src = from_utf8(&event.src)
+    let src = from_utf8(&event.src)
         .expect("Source should be UTF-8 encoded");
     let path = from_utf8(&event.path)
         .expect("Path should be UTF-8 encoded");
@@ -107,9 +107,8 @@ fn event_handler(data: &[u8]) -> i32 {
     // TODO: Add write (and execute) permissions on the parent directory
     // whenever a file is beeing created
 
-    // Extract string representation of the permission flags
-    // TODO: Add support for exec permission
-    let permission = {
+    // Encode read and write permissions
+    let mut permissions = String::from({
         if event.flags & O_WRONLY != 0 {
             "-w"
         } else if event.flags & O_RDWR != 0 {
@@ -117,10 +116,16 @@ fn event_handler(data: &[u8]) -> i32 {
         } else {
             "r-"
         }
-    };
+    });
+
+    // Encode exec permission
+    permissions.push(
+        // NOTE: Need starts_with because src has always a lenght of 32 chars
+        if src.starts_with("lsm/bprm_check_security") { 'x' } else { '-' }
+    );
 
     // Patch double printing issue
-    println!("{} {}", &path[..event.path_len as usize], permission);
+    println!("{} {}", &path[..event.path_len as usize], permissions);
 
     return 0;
 }

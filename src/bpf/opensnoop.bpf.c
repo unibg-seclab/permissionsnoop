@@ -127,18 +127,19 @@ int BPF_PROG(trace_exec, struct linux_binprm *bprm) {
 
     struct file *file = bprm->file;
     if (file) {
-        register_path_event("lsm/bprm_check", &file->f_path, file->f_flags);
+        register_path_event("lsm/bprm_check_security", &file->f_path,
+                            file->f_flags);
     }
 
     struct file *interpreter = bprm->interpreter;
     if (interpreter) {
-        register_path_event("lsm/bprm_check", &interpreter->f_path,
+        register_path_event("lsm/bprm_check_security", &interpreter->f_path,
                             interpreter->f_flags);
     }
     
     struct file *executable = bprm->executable;
     if (executable) {
-        register_path_event("lsm/bprm_check", &executable->f_path,
+        register_path_event("lsm/bprm_check_security", &executable->f_path,
                             executable->f_flags);
     }
 

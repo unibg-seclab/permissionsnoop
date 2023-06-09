@@ -184,7 +184,7 @@ int BPF_PROG(trace_inode_getattr, const struct path *path) {
 
 SEC("lsm/file_open")
 int BPF_PROG(trace_open, struct file *file, int mask) {
-    if (is_traced()) {
+    if (file && is_traced()) {
         u8 permission = mode_to_permission(file->f_mode);
         register_path_event("lsm/file_open", &file->f_path, permission);
     }
@@ -197,7 +197,7 @@ int BPF_PROG(trace_open, struct file *file, int mask) {
 */
 SEC("lsm/bprm_check_security")
 int BPF_PROG(trace_exec, struct linux_binprm *bprm) {
-    if (!is_traced()) {
+    if (!bprm || !is_traced()) {
         return 0;
     }
 

@@ -25,7 +25,8 @@ struct Args {
 struct PathEvent {
     src: [u8; SRC_SIZE],
     path: [u8; PATH_SIZE],
-    len: u32,
+    path_len: u32,
+    flags: u32,
 }
 
 fn is_lsm_bpf_available() -> Result<bool> {
@@ -78,7 +79,7 @@ fn event_handler(data: &[u8]) -> i32 {
     let path = from_utf8(&event.path)
         .expect("Path should be UTF-8 encoded");
     // Patch double printing issue
-    println!("{}", &path[..event.len as usize]);
+    println!("{} {}", &path[..event.path_len as usize], event.flags);
 
     return 0;
 }

@@ -3,41 +3,32 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
 
-// include/uapi/linux/limits.h
-#define PATH_MAX    4096    /* # chars in a path name including nul */
+// include/linux/compiler_types.h
+#define __force     __attribute__((force))
 
-// include/uapi/asm-generic/fcntl.h
-#define O_RDONLY    00000000
-#define O_WRONLY    00000001
-#define O_RDWR      00000002
+// include/linux/fs.h
+#define MAY_EXEC    0x00000001
+#define MAY_WRITE   0x00000002
+#define MAY_READ    0x00000004
 
-// #define O_CREAT		00000100	// create when does not exist
-// #define O_EXCL		00000200	// create when does not exist, fails otherwise
-// #define O_DIRECTORY	00200000
-// #define __O_TMPFILE	020000000
-// #define O_TMPFILE (__O_TMPFILE | O_DIRECTORY)   // create unnamed temporary file
-
-// NOTES (https://man7.org/linux/man-pages/man2/open.2.html):
-// - Opening a file or directory with the O_PATH flag requires no permissions
-//   on the object itself (but does require execute permission on the
-//   directories in the path prefix).
-// - An O_EXCL without O_CREAT has undefined behavior, unless working on a
-//   block device
-// - An O_TMPFILE without O_EXCL can be made permanent with linkat
-// - An O_TRUNC without writing access mode has unspecified effect
+/* file is open for reading */
+#define FMODE_READ      ((__force fmode_t)0x1)
+/* file is open for writing */
+#define FMODE_WRITE     ((__force fmode_t)0x2)
+/* File is opened for execution with sys_execve / sys_uselib */
+#define FMODE_EXEC      ((__force fmode_t)0x20)
+#define FMODE_CREATED   ((__force fmode_t)0x100000)
 
 // include/uapi/asm-generic/mman-common.h
 #define PROT_READ   0x1     /* page can be read */
 #define PROT_WRITE  0x2     /* page can be written */
 #define PROT_EXEC   0x4     /* page can be executed */
 
+// include/uapi/linux/limits.h
+#define PATH_MAX    4096    /* # chars in a path name including nul */
+
 // include/uapi/linux/mman.h
 #define MAP_PRIVATE 0x02    /* changes are private */
-
-// include/linux/fs.h
-#define MAY_EXEC    0x00000001
-#define MAY_WRITE   0x00000002
-#define MAY_READ    0x00000004
 
 #define SRC_MAX     32
 
@@ -128,7 +119,6 @@ void BPF_PROG(delete_trace_on_exit, struct task_struct *child) {
 
 // TODO: Add write (and execute) permissions on the parent directory
 // whenever a file is beeing created
-// TODO: Use f_mode when feasible
 
 bool is_traced() {
     struct task_struct *task = bpf_get_current_task_btf();
@@ -136,15 +126,17 @@ bool is_traced() {
     return is_traced != NULL;
 }
 
-u8 flags_to_permission(unsigned int flags) {
+u8 mode_to_permission(fmode_t mode) {
     u8 permission = 0;
 
-    if (flags & O_WRONLY) {
-        permission = MAY_WRITE;
-    } else if (flags & O_RDWR) {
-        permission = MAY_READ | MAY_WRITE;
-    } else {
-        permission = MAY_READ;
+    if (mode & FMODE_READ) {
+        permission |= MAY_READ;
+    }
+    if (mode & FMODE_WRITE) {
+        permission |= MAY_WRITE;
+    }
+    if (mode & FMODE_EXEC) {
+        permission |= MAY_EXEC;
     }
 
     return permission;
@@ -193,7 +185,7 @@ int BPF_PROG(trace_inode_getattr, const struct path *path) {
 SEC("lsm/file_open")
 int BPF_PROG(trace_open, struct file *file, int mask) {
     if (is_traced()) {
-        u8 permission = flags_to_permission(file->f_flags);
+        u8 permission = mode_to_permission(file->f_mode);
         register_path_event("lsm/file_open", &file->f_path, permission);
     }
 
@@ -214,21 +206,21 @@ int BPF_PROG(trace_exec, struct linux_binprm *bprm) {
 
     file = bprm->file;
     if (file) {
-        permission = flags_to_permission(file->f_flags) | MAY_EXEC;
+        permission = mode_to_permission(file->f_mode) | MAY_EXEC;
         register_path_event("lsm/bprm_check_security", &file->f_path,
                             permission);
     }
 
     file = bprm->interpreter;   // interpreter specified with the shebang
     if (file) {
-        permission = flags_to_permission(file->f_flags) | MAY_EXEC;
+        permission = mode_to_permission(file->f_mode) | MAY_EXEC;
         register_path_event("lsm/bprm_check_security", &file->f_path,
                             permission);
     }
     
     file = bprm->executable;    // executable to pass to the interpreter
     if (file) {
-        permission = flags_to_permission(file->f_flags) | MAY_EXEC;
+        permission = mode_to_permission(file->f_mode) | MAY_EXEC;
         register_path_event("lsm/bprm_check_security", &file->f_path,
                             permission);
     }

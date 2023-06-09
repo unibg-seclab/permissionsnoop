@@ -114,7 +114,7 @@ void register_path_event(char *src, struct path *path, unsigned int flags) {
     event->path_len = bpf_d_path(path, event->path, PATH_MAX);
     event->flags = flags;
 #ifdef DEBUG
-    bpf_printk("%s: %s %s", src, event->path, event->flags);
+    bpf_printk("%s: %s %u", src, event->path, event->flags);
 #endif /* DEBUG */
 	bpf_ringbuf_submit(event, 0);
 }

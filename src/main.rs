@@ -35,6 +35,14 @@ const O_RDWR: u32 = 00000001;
 // - An O_TMPFILE without O_EXCL can be made permanent with linkat
 // - An O_TRUNC without writing access mode has unspecified effect
 
+// include/uapi/asm-generic/mman-common.h
+const PROT_READ: u64 = 0x1;     /* page can be read */
+const PROT_WRITE: u64 = 0x2;    /* page can be written */
+const PROT_EXEC: u64 = 0x4;     /* page can be executed */
+
+// include/uapi/linux/mman.h
+const MAP_PRIVATE: u64 = 0x02;  /* Changes are private */
+
 const SRC_SIZE: usize = 32;
 
 #[derive(Parser)]
@@ -52,6 +60,7 @@ struct PathEvent {
     path: [u8; PATH_MAX],
     path_len: u32,
     flags: u32,
+    prot: u64,
 }
 
 fn is_lsm_bpf_available() -> Result<bool> {
@@ -107,25 +116,36 @@ fn event_handler(data: &[u8]) -> i32 {
     // TODO: Add write (and execute) permissions on the parent directory
     // whenever a file is beeing created
 
-    // Encode read and write permissions
-    let mut permissions = String::from({
-        if event.flags & O_WRONLY != 0 {
-            "-w"
-        } else if event.flags & O_RDWR != 0 {
-            "rw"
-        } else {
-            "r-"
-        }
-    });
+    let mut permissions = String::new();
+    if event.prot == 0 {
+        // Encode read and write permissions
+        permissions = String::from({
+            if event.flags & O_WRONLY != 0 {
+                "-w"
+            } else if event.flags & O_RDWR != 0 {
+                "rw"
+            } else {
+                "r-"
+            }
+        });
 
-    // Encode exec permission
-    permissions.push(
-        // NOTE: Need starts_with because src has always a lenght of 32 chars
-        if src.starts_with("lsm/bprm_check_security") { 'x' } else { '-' }
-    );
+        // Encode exec permission
+        permissions.push(
+            // NOTE: Need starts_with because src has always a lenght of 32 chars
+            if src.starts_with("lsm/bprm_check_security") { 'x' } else { '-' }
+        );
+    } else {
+        // Handle loading dynamic libraries
+        permissions.push(if event.prot & PROT_READ != 0 { 'r' } else { '-' });
+        permissions.push(
+            if event.prot & PROT_WRITE != 0 &&
+                event.flags & (MAP_PRIVATE as u32) == 0 { 'w' } else { '-' }
+        );
+        permissions.push(if event.prot & PROT_EXEC != 0 { 'x' } else { '-' });
+    }
 
     // Patch double printing issue
-    println!("{} {}", &path[..event.path_len as usize], permissions);
+    println!("{}: {} {}", src, &path[..event.path_len as usize], permissions);
 
     return 0;
 }

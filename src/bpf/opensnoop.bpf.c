@@ -11,6 +11,11 @@
 #define O_WRONLY    00000001
 #define O_RDWR  	00000001
 
+// include/uapi/asm-generic/mman-common.h
+#define PROT_READ	0x1		/* page can be read */
+#define PROT_WRITE	0x2		/* page can be written */
+#define PROT_EXEC	0x4		/* page can be executed */
+
 #define SRC_MAX 32
 
 char LICENSE[] SEC("license") = "Dual MIT/GPL";
@@ -23,6 +28,7 @@ struct path_event {
     char path[PATH_MAX];
     unsigned int path_len;
     unsigned int flags;
+    unsigned long prot;
 };
 
 /* MAPS */
@@ -104,15 +110,19 @@ bool is_traced() {
     return is_traced != NULL;
 }
 
-void register_path_event(char *src, struct path *path, unsigned int flags) {
+void register_path_event(char *src, struct path *path, unsigned int flags,
+                         unsigned long prot) {
     struct path_event *event = bpf_ringbuf_reserve(&events, sizeof(*event), 0);
 	if (!event) {
 		return;
     }
 
+    // TODO: Move part of permission logic extraction to kernel space
+
     bpf_probe_read_kernel_str(event->src, SRC_MAX, src);
     event->path_len = bpf_d_path(path, event->path, PATH_MAX);
     event->flags = flags;
+    event->prot = prot;
 #ifdef DEBUG
     bpf_printk("%s: %s %u", src, event->path, event->flags);
 #endif /* DEBUG */
@@ -128,19 +138,30 @@ int BPF_PROG(trace_exec, struct linux_binprm *bprm) {
     struct file *file = bprm->file;
     if (file) {
         register_path_event("lsm/bprm_check_security", &file->f_path,
-                            file->f_flags);
+                            file->f_flags, 0);
     }
 
     struct file *interpreter = bprm->interpreter;
     if (interpreter) {
         register_path_event("lsm/bprm_check_security", &interpreter->f_path,
-                            interpreter->f_flags);
+                            interpreter->f_flags, 0);
     }
     
     struct file *executable = bprm->executable;
     if (executable) {
         register_path_event("lsm/bprm_check_security", &executable->f_path,
-                            executable->f_flags);
+                            executable->f_flags, 0);
+    }
+
+    return 0;
+}
+
+SEC("lsm/mmap_file")
+int BPF_PROG(trace_mmap, struct file *file, unsigned long prot,
+             unsigned long flags) {
+    if (file && is_traced()) {
+        register_path_event("lsm/mmap_file", &file->f_path,
+                            flags, prot);
     }
 
     return 0;
@@ -156,7 +177,7 @@ int BPF_PROG(trace_exec, struct linux_binprm *bprm) {
 // int BPF_PROG(trace_file_permission, struct file *file, int mask) {
 //     if (is_traced()) {
 //         register_path_event("lsm/file_permission", &file->f_path,
-//                             file->f_flags);
+//                             file->f_flags, 0);
 //     }
 
 //     return 0;
@@ -165,7 +186,7 @@ int BPF_PROG(trace_exec, struct linux_binprm *bprm) {
 SEC("lsm/inode_getattr")
 int BPF_PROG(trace_inode_getattr, const struct path *path) {
     if (is_traced()) {
-        register_path_event("lsm/inode_getattr", path, O_RDONLY);
+        register_path_event("lsm/inode_getattr", path, O_RDONLY, 0);
     }
 
     return 0;
@@ -174,7 +195,7 @@ int BPF_PROG(trace_inode_getattr, const struct path *path) {
 SEC("lsm/file_open")
 int BPF_PROG(trace_open, struct file *file, int mask) {
     if (is_traced()) {
-        register_path_event("lsm/file_open", &file->f_path, file->f_flags);
+        register_path_event("lsm/file_open", &file->f_path, file->f_flags, 0);
     }
 
     return 0;
@@ -183,7 +204,7 @@ int BPF_PROG(trace_open, struct file *file, int mask) {
 // SEC("lsm/path_truncate")
 // int BPF_PROG(trace_truncate, const struct path *path) {
 //     if (is_traced()) {
-//         register_path_event("lsm/path_truncate", path, O_WRONLY);
+//         register_path_event("lsm/path_truncate", path, O_WRONLY, 0);
 //     }
 
 //     return 0;
@@ -192,7 +213,7 @@ int BPF_PROG(trace_open, struct file *file, int mask) {
 SEC("fentry/vfs_truncate")
 int BPF_PROG(trace_vfs_truncate, const struct path *path, loff_t length) {
     if (is_traced()) {
-        register_path_event("fentry/vfs_truncate", path, O_WRONLY);
+        register_path_event("fentry/vfs_truncate", path, O_WRONLY, 0);
     }
 
     return 0;
@@ -203,7 +224,7 @@ int BPF_PROG(trace_vfs_fallocate, struct file *file, int mode, loff_t offset,
              loff_t len) {
     if (is_traced()) {
         register_path_event("fentry/vfs_fallocate", &file->f_path,
-                            file->f_flags);
+                            file->f_flags, 0);
     }
 
     return 0;
@@ -213,7 +234,7 @@ SEC("fentry/dentry_open")
 int BPF_PROG(trace_dentry_open, const struct path *path, int flags,
 			 const struct cred *cred) {
     if (is_traced()) {
-        register_path_event("fentry/dentry_open", path, flags);
+        register_path_event("fentry/dentry_open", path, flags, 0);
     }
 
     return 0;
@@ -223,7 +244,7 @@ SEC("fentry/vfs_getattr")
 int BPF_PROG(trace_vfs_getattr, const struct path *path, struct kstat *stat,
 		     u32 request_mask, unsigned int query_flags) {
     if (is_traced()) {
-        register_path_event("fentry/vfs_getattr", path, O_RDONLY);
+        register_path_event("fentry/vfs_getattr", path, O_RDONLY, 0);
     }
 
     return 0;
@@ -232,7 +253,8 @@ int BPF_PROG(trace_vfs_getattr, const struct path *path, struct kstat *stat,
 SEC("fentry/filp_close")
 int BPF_PROG(trace_filp_close, struct file *filp, fl_owner_t id) {
     if (is_traced()) {
-        register_path_event("fentry/filp_close", &filp->f_path, filp->f_flags);
+        register_path_event("fentry/filp_close", &filp->f_path,
+                            filp->f_flags, 0);
     }
 
     return 0;

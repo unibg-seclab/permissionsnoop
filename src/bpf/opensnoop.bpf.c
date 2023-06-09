@@ -119,6 +119,32 @@ void register_path_event(char *src, struct path *path, unsigned int flags) {
 	bpf_ringbuf_submit(event, 0);
 }
 
+SEC("lsm/bprm_check_security")
+int BPF_PROG(trace_exec, struct linux_binprm *bprm) {
+    if (!is_traced()) {
+        return 0;
+    }
+
+    struct file *file = bprm->file;
+    if (file) {
+        register_path_event("lsm/bprm_check", &file->f_path, file->f_flags);
+    }
+
+    struct file *interpreter = bprm->interpreter;
+    if (interpreter) {
+        register_path_event("lsm/bprm_check", &interpreter->f_path,
+                            interpreter->f_flags);
+    }
+    
+    struct file *executable = bprm->executable;
+    if (executable) {
+        register_path_event("lsm/bprm_check", &executable->f_path,
+                            executable->f_flags);
+    }
+
+    return 0;
+}
+
 /*
  * In the following we are using all the hook points where the bpf_d_path
  * helper function is available according to the btf_allowlist_d_path variable

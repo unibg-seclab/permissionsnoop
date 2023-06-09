@@ -41,7 +41,7 @@ const SRC_SIZE: usize = 32;
 struct Args {
     // TODO: Add src and permission arguments
     // TODO: Print events as they come or aggregate them
-    // TODO: Export src, paths and permissions to a CSV file
+    // TODO: Export to CSV file
     #[clap(required(true), help("Command run inside the sandbox."))]
     command: Vec<String>,
 }
@@ -104,7 +104,11 @@ fn event_handler(data: &[u8]) -> i32 {
     let path = from_utf8(&event.path)
         .expect("Path should be UTF-8 encoded");
 
+    // TODO: Add write (and execute) permissions on the parent directory
+    // whenever a file is beeing created
+
     // Extract string representation of the permission flags
+    // TODO: Add support for exec permission
     let permission = {
         if event.flags & O_WRONLY != 0 {
             "-w"

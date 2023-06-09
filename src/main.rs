@@ -90,9 +90,6 @@ fn event_handler(data: &[u8]) -> i32 {
     let path = from_utf8(&event.path)
         .expect("Path should be UTF-8 encoded");
 
-    // TODO: Add write (and execute) permissions on the parent directory
-    // whenever a file is beeing created
-
     let mut permission = String::new();
     permission.push(if event.permission & MAY_READ != 0 { 'r' } else { '-' });
     permission.push(if event.permission & MAY_WRITE != 0 { 'w' } else { '-' });

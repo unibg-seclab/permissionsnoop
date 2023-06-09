@@ -126,8 +126,9 @@ void BPF_PROG(delete_trace_on_exit, struct task_struct *child) {
 
 /* TRACING */
 
+// TODO: Add write (and execute) permissions on the parent directory
+// whenever a file is beeing created
 // TODO: Use f_mode when feasible
-// TODO: Remove unnecessary hook points
 
 bool is_traced() {
     struct task_struct *task = bpf_get_current_task_btf();
@@ -180,6 +181,28 @@ void register_path_event(char *src, struct path *path, u8 permission) {
 	bpf_ringbuf_submit(event, 0);
 }
 
+SEC("lsm/inode_getattr")
+int BPF_PROG(trace_inode_getattr, const struct path *path) {
+    if (is_traced()) {
+        register_path_event("lsm/inode_getattr", path, MAY_READ);
+    }
+
+    return 0;
+}
+
+SEC("lsm/file_open")
+int BPF_PROG(trace_open, struct file *file, int mask) {
+    if (is_traced()) {
+        u8 permission = flags_to_permission(file->f_flags);
+        register_path_event("lsm/file_open", &file->f_path, permission);
+    }
+
+    return 0;
+}
+
+/*
+ * Trace execve events to capture file executions
+*/
 SEC("lsm/bprm_check_security")
 int BPF_PROG(trace_exec, struct linux_binprm *bprm) {
     if (!is_traced()) {
@@ -213,108 +236,16 @@ int BPF_PROG(trace_exec, struct linux_binprm *bprm) {
     return 0;
 }
 
+/*
+ * Trace memory mapping events to capture how the memory region hosting the
+ * file is protected
+*/
 SEC("lsm/mmap_file")
 int BPF_PROG(trace_mmap, struct file *file, unsigned long prot,
              unsigned long flags) {
     if (file && is_traced()) {
         u8 permission = mmap_permission(prot, flags);
         register_path_event("lsm/mmap_file", &file->f_path, permission);
-    }
-
-    return 0;
-}
-
-/*
- * In the following we are using all the hook points where the bpf_d_path
- * helper function is available according to the btf_allowlist_d_path variable
- * https://github.com/torvalds/linux/blob/master/kernel/trace/bpf_trace.c#L920
-*/
-
-// SEC("lsm/file_permission")
-// int BPF_PROG(trace_file_permission, struct file *file, int mask) {
-//     if (is_traced()) {
-//         u8 permission = flags_to_permission(file->f_flags);
-//         register_path_event("lsm/file_permission", &file->f_path,
-//                             permission);
-//     }
-
-//     return 0;
-// }
-
-SEC("lsm/inode_getattr")
-int BPF_PROG(trace_inode_getattr, const struct path *path) {
-    if (is_traced()) {
-        register_path_event("lsm/inode_getattr", path, MAY_READ);
-    }
-
-    return 0;
-}
-
-SEC("lsm/file_open")
-int BPF_PROG(trace_open, struct file *file, int mask) {
-    if (is_traced()) {
-        u8 permission = flags_to_permission(file->f_flags);
-        register_path_event("lsm/file_open", &file->f_path, permission);
-    }
-
-    return 0;
-}
-
-// SEC("lsm/path_truncate")
-// int BPF_PROG(trace_truncate, const struct path *path) {
-//     if (is_traced()) {
-//         register_path_event("lsm/path_truncate", path, MAY_WRITE);
-//     }
-
-//     return 0;
-// }
-
-SEC("fentry/vfs_truncate")
-int BPF_PROG(trace_vfs_truncate, const struct path *path, loff_t length) {
-    if (is_traced()) {
-        register_path_event("fentry/vfs_truncate", path, MAY_WRITE);
-    }
-
-    return 0;
-}
-
-SEC("fentry/vfs_fallocate")
-int BPF_PROG(trace_vfs_fallocate, struct file *file, int mode, loff_t offset,
-             loff_t len) {
-    if (is_traced()) {
-        u8 permission = flags_to_permission(file->f_flags);
-        register_path_event("fentry/vfs_fallocate", &file->f_path, permission);
-    }
-
-    return 0;
-}
-
-SEC("fentry/dentry_open")
-int BPF_PROG(trace_dentry_open, const struct path *path, int flags,
-			 const struct cred *cred) {
-    if (is_traced()) {
-        u8 permission = flags_to_permission(flags);
-        register_path_event("fentry/dentry_open", path, permission);
-    }
-
-    return 0;
-}
-
-SEC("fentry/vfs_getattr")
-int BPF_PROG(trace_vfs_getattr, const struct path *path, struct kstat *stat,
-		     u32 request_mask, unsigned int query_flags) {
-    if (is_traced()) {
-        register_path_event("fentry/vfs_getattr", path, MAY_READ);
-    }
-
-    return 0;
-}
-
-SEC("fentry/filp_close")
-int BPF_PROG(trace_filp_close, struct file *filp, fl_owner_t id) {
-    if (is_traced()) {
-        u8 permission = flags_to_permission(filp->f_flags);
-        register_path_event("fentry/filp_close", &filp->f_path, permission);
     }
 
     return 0;

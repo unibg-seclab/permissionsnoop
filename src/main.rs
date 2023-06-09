@@ -12,11 +12,36 @@ use clap::Parser;
 mod bpf;
 use bpf::opensnoop::*;
 
-const PATH_SIZE: usize = 4096;
+// include/uapi/linux/limits.h
+const PATH_MAX: usize = 4096;
+
+// include/uapi/asm-generic/fcntl.h
+const O_RDONLY: u32 = 00000000;
+const O_WRONLY: u32 = 00000001;
+const O_RDWR: u32 = 00000001;
+
+// #define O_CREAT		00000100	// create when does not exist
+// #define O_EXCL		00000200	// create when does not exist, fails otherwise
+// #define O_DIRECTORY	00200000
+// #define __O_TMPFILE	020000000
+// #define O_TMPFILE (__O_TMPFILE | O_DIRECTORY)   // create unnamed temporary file
+
+// ADDITIONAL NOTES:
+// - Opening a file or directory with the O_PATH flag requires no permissions
+//   on the object itself (but does require execute permission on the
+//   directories in the path prefix).
+// - An O_EXCL without O_CREAT has undefined behavior, unless working on a
+//   block device
+// - An O_TMPFILE without O_EXCL can be made permanent with linkat
+// - An O_TRUNC without writing access mode has unspecified effect
+
 const SRC_SIZE: usize = 32;
 
 #[derive(Parser)]
 struct Args {
+    // TODO: Add src and permission arguments
+    // TODO: Print events as they come or aggregate them
+    // TODO: Export src, paths and permissions to a CSV file
     #[clap(required(true), help("Command run inside the sandbox."))]
     command: Vec<String>,
 }
@@ -24,7 +49,7 @@ struct Args {
 #[repr(C)]
 struct PathEvent {
     src: [u8; SRC_SIZE],
-    path: [u8; PATH_SIZE],
+    path: [u8; PATH_MAX],
     path_len: u32,
     flags: u32,
 }
@@ -78,8 +103,20 @@ fn event_handler(data: &[u8]) -> i32 {
         .expect("Source should be UTF-8 encoded");
     let path = from_utf8(&event.path)
         .expect("Path should be UTF-8 encoded");
+
+    // Extract string representation of the permission flags
+    let permission = {
+        if event.flags & O_WRONLY != 0 {
+            "-w"
+        } else if event.flags & O_RDWR != 0 {
+            "rw"
+        } else {
+            "r-"
+        }
+    };
+
     // Patch double printing issue
-    println!("{} {}", &path[..event.path_len as usize], event.flags);
+    println!("{} {}", &path[..event.path_len as usize], permission);
 
     return 0;
 }

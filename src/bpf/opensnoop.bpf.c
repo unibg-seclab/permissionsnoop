@@ -117,8 +117,7 @@ void BPF_PROG(delete_trace_on_exit, struct task_struct *child) {
 
 /* TRACING */
 
-// TODO: Add write (and execute) permissions on the parent directory
-// whenever a file is beeing created
+// TODO: Keep track of creation and removal events using other hooks
 
 bool is_traced() {
     struct task_struct *task = bpf_get_current_task_btf();
@@ -173,20 +172,21 @@ void register_path_event(char *src, struct path *path, u8 permission) {
 	bpf_ringbuf_submit(event, 0);
 }
 
-SEC("lsm/inode_getattr")
+SEC("fentry/security_inode_getattr")
 int BPF_PROG(trace_inode_getattr, const struct path *path) {
     if (is_traced()) {
-        register_path_event("lsm/inode_getattr", path, MAY_READ);
+        register_path_event("fentry/security_inode_getattr", path, MAY_READ);
     }
 
     return 0;
 }
 
-SEC("lsm/file_open")
+SEC("fentry/security_file_open")
 int BPF_PROG(trace_open, struct file *file, int mask) {
     if (file && is_traced()) {
         u8 permission = mode_to_permission(file->f_mode);
-        register_path_event("lsm/file_open", &file->f_path, permission);
+        register_path_event("fentry/security_file_open", &file->f_path,
+                            permission);
     }
 
     return 0;
@@ -194,6 +194,9 @@ int BPF_PROG(trace_open, struct file *file, int mask) {
 
 /*
  * Trace execve events to capture file executions
+ *
+ * NOTE: For some unknown reason fentry/security_bprm_check does not allow the
+ * use of bpf_d_path, but lsm/bprm_check_security does
 */
 SEC("lsm/bprm_check_security")
 int BPF_PROG(trace_exec, struct linux_binprm *bprm) {
@@ -231,6 +234,9 @@ int BPF_PROG(trace_exec, struct linux_binprm *bprm) {
 /*
  * Trace memory mapping events to capture how the memory region hosting the
  * file is protected
+ * 
+ * NOTE: For some unknown reason fentry/security_mmap_file does not allow the
+ * use of bpf_d_path, but lsm/mmap_file does
 */
 SEC("lsm/mmap_file")
 int BPF_PROG(trace_mmap, struct file *file, unsigned long prot,

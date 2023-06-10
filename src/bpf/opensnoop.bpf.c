@@ -118,6 +118,7 @@ void BPF_PROG(delete_trace_on_exit, struct task_struct *child) {
 /* TRACING */
 
 // TODO: Keep track of creation and removal events using other hooks
+// TODO: Trace mprotect to capture changes in memory mapping protection
 
 bool is_traced() {
     struct task_struct *task = bpf_get_current_task_btf();
@@ -157,6 +158,16 @@ u8 mmap_permission(unsigned long prot, unsigned long flags) {
     return permission;
 }
 
+/*
+ * Write event to the ring buffer
+ *
+ * This function relies on bpf_d_path helper function, which is allowed to:
+ * - tracing programs with iter attachment type
+ * - lsm programs attached to sleepable hook programs (in sleepable_lsm_hooks)
+ * - any program attached to functions in btf_allowlist_d_path
+ *
+ * (see bpf_d_path_allowed implementation at /kernel/trace/bpf_trace.c)
+*/
 void register_path_event(char *src, struct path *path, u8 permission) {
     struct path_event *event = bpf_ringbuf_reserve(&events, sizeof(*event), 0);
 	if (!event) {
@@ -195,8 +206,9 @@ int BPF_PROG(trace_open, struct file *file, int mask) {
 /*
  * Trace execve events to capture file executions
  *
- * NOTE: For some unknown reason fentry/security_bprm_check does not allow the
- * use of bpf_d_path, but lsm/bprm_check_security does
+ * fentry/security_bprm_check does not belong to btf_allowlist_d_path, but
+ * lsm/bprm_check_security belongs to sleepable_lsm_hooks, so we must use
+ * the latter to have bpf_d_path available
 */
 SEC("lsm/bprm_check_security")
 int BPF_PROG(trace_exec, struct linux_binprm *bprm) {
@@ -235,8 +247,9 @@ int BPF_PROG(trace_exec, struct linux_binprm *bprm) {
  * Trace memory mapping events to capture how the memory region hosting the
  * file is protected
  * 
- * NOTE: For some unknown reason fentry/security_mmap_file does not allow the
- * use of bpf_d_path, but lsm/mmap_file does
+ * fentry/security_mmap_file does not belong to btf_allowlist_d_path, but
+ * lsm/mmap_file belongs to sleepable_lsm_hooks, so we must use the latter to
+ * have bpf_d_path available
 */
 SEC("lsm/mmap_file")
 int BPF_PROG(trace_mmap, struct file *file, unsigned long prot,

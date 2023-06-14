@@ -3,21 +3,18 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
 
-// include/linux/compiler_types.h
-#define __force     __attribute__((force))
-
 // include/linux/fs.h
 #define MAY_EXEC    0x00000001
 #define MAY_WRITE   0x00000002
 #define MAY_READ    0x00000004
 
 /* file is open for reading */
-#define FMODE_READ      ((__force fmode_t)0x1)
+#define FMODE_READ      0x1
 /* file is open for writing */
-#define FMODE_WRITE     ((__force fmode_t)0x2)
+#define FMODE_WRITE     0x2
 /* File is opened for execution with sys_execve / sys_uselib */
-#define FMODE_EXEC      ((__force fmode_t)0x20)
-#define FMODE_CREATED   ((__force fmode_t)0x100000)
+#define FMODE_EXEC      0x20
+#define FMODE_CREATED   0x100000
 
 // include/uapi/asm-generic/mman-common.h
 #define PROT_READ   0x1     /* page can be read */
@@ -36,7 +33,7 @@
 #define SRC_MAX     32
 
 char LICENSE[] SEC("license") = "Dual MIT/GPL";
-const u8 TRUE = true;
+u8 TRUE = true;
 
 /* STRUCTS */
 
@@ -199,7 +196,7 @@ int BPF_PROG(trace_file_permission, struct file *file, int mask) {
 }
 
 SEC("fentry/security_inode_getattr")
-int BPF_PROG(trace_inode_getattr, const struct path *path) {
+int BPF_PROG(trace_inode_getattr, struct path *path) {
     if (is_traced()) {
         register_path_event("fentry/security_inode_getattr", path, MAY_READ);
     }
@@ -377,7 +374,7 @@ int BPF_PROG(trace_set_fowner, struct file *file) {
  * not have it available (even with our kernel changes)
  */
 SEC("fentry/security_file_truncate")
-int BPF_PROG(trace_receive, struct file *file) {
+int BPF_PROG(trace_file_truncate, struct file *file) {
     if (file && is_traced()) {
         u8 permission = mode_to_permission(file->f_mode);
         register_path_event("fentry/security_file_truncate", &file->f_path,
@@ -388,7 +385,7 @@ int BPF_PROG(trace_receive, struct file *file) {
 }
 
 SEC("fentry/security_path_mknod")
-int BPF_PROG(trace_mknod, const struct path *dir, struct dentry *dentry,
+int BPF_PROG(trace_mknod, struct path *dir, struct dentry *dentry,
              umode_t mode, unsigned int dev) {
     if (dir && is_traced()) {
         register_path_event("fentry/security_path_mknod", dir,
@@ -399,7 +396,7 @@ int BPF_PROG(trace_mknod, const struct path *dir, struct dentry *dentry,
 }
 
 SEC("fentry/security_path_mkdir")
-int BPF_PROG(trace_mkdir, const struct path *dir, struct dentry *dentry,
+int BPF_PROG(trace_mkdir, struct path *dir, struct dentry *dentry,
              umode_t mode) {
     if (dir && is_traced()) {
         register_path_event("fentry/security_path_mkdir", dir,
@@ -410,7 +407,7 @@ int BPF_PROG(trace_mkdir, const struct path *dir, struct dentry *dentry,
 }
 
 SEC("fentry/security_path_rmdir")
-int BPF_PROG(trace_rmdir, const struct path *dir, struct dentry *dentry) {
+int BPF_PROG(trace_rmdir, struct path *dir, struct dentry *dentry) {
     if (dir && is_traced()) {
         register_path_event("fentry/security_path_rmdir", dir,
                             MAY_WRITE | MAY_EXEC);
@@ -420,7 +417,7 @@ int BPF_PROG(trace_rmdir, const struct path *dir, struct dentry *dentry) {
 }
 
 SEC("fentry/security_path_unlink")
-int BPF_PROG(trace_unlink, const struct path *dir, struct dentry *dentry) {
+int BPF_PROG(trace_unlink, struct path *dir, struct dentry *dentry) {
     if (dir && is_traced()) {
         register_path_event("fentry/security_path_unlink", dir,
                             MAY_WRITE | MAY_EXEC);
@@ -430,8 +427,8 @@ int BPF_PROG(trace_unlink, const struct path *dir, struct dentry *dentry) {
 }
 
 SEC("fentry/security_path_symlink")
-int BPF_PROG(trace_symlink, const struct path *dir, struct dentry *dentry,
-			 const char *old_name) {
+int BPF_PROG(trace_symlink, struct path *dir, struct dentry *dentry,
+             char *old_name) {
     if (dir && is_traced()) {
         register_path_event("fentry/security_path_symlink", dir,
                             MAY_WRITE | MAY_EXEC);
@@ -441,8 +438,8 @@ int BPF_PROG(trace_symlink, const struct path *dir, struct dentry *dentry,
 }
 
 SEC("fentry/security_path_link")
-int BPF_PROG(trace_link, struct dentry *old_dentry,
-             const struct path *new_dir, struct dentry *new_dentry) {
+int BPF_PROG(trace_link, struct dentry *old_dentry, struct path *new_dir,
+             struct dentry *new_dentry) {
     if (new_dir && is_traced()) {
         register_path_event("fentry/security_path_link", new_dir,
                             MAY_WRITE | MAY_EXEC);
@@ -452,9 +449,9 @@ int BPF_PROG(trace_link, struct dentry *old_dentry,
 }
 
 SEC("fentry/security_path_rename")
-int BPF_PROG(trace_rename, const struct path *old_dir,
-             struct dentry *old_dentry, const struct path *new_dir,
-             struct dentry *new_dentry, unsigned int flags) {
+int BPF_PROG(trace_rename, struct path *old_dir, struct dentry *old_dentry,
+             struct path *new_dir, struct dentry *new_dentry,
+             unsigned int flags) {
     if (new_dir && is_traced()) {
         register_path_event("fentry/security_path_rename", old_dir,
                             MAY_WRITE | MAY_EXEC);
@@ -466,7 +463,7 @@ int BPF_PROG(trace_rename, const struct path *old_dir,
 }
 
 SEC("fentry/security_path_truncate")
-int BPF_PROG(trace_truncate, const struct path *path) {
+int BPF_PROG(trace_path_truncate, struct path *path) {
     if (path && is_traced()) {
         register_path_event("fentry/security_path_truncate", path, MAY_WRITE);
     }
@@ -475,7 +472,7 @@ int BPF_PROG(trace_truncate, const struct path *path) {
 }
 
 SEC("fentry/security_path_chmod")
-int BPF_PROG(trace_chmod, const struct path *path, umode_t mode) {
+int BPF_PROG(trace_chmod, struct path *path, umode_t mode) {
     if (path && is_traced()) {
         register_path_event("fentry/security_path_chmod", path, MAY_WRITE);
     }
@@ -484,13 +481,13 @@ int BPF_PROG(trace_chmod, const struct path *path, umode_t mode) {
 }
 
 struct trace_chown_args {
-    const struct path *path;
+    struct path *path;
     kuid_t uid;
     kgid_t gid;
 };
 
 SEC("fentry/security_path_chown")
-int trace_chown(const struct trace_chown_args *args) {
+int trace_chown(struct trace_chown_args *args) {
     if (args && args->path && is_traced()) {
         register_path_event("fentry/security_path_chown", args->path,
                             MAY_WRITE);
@@ -500,7 +497,7 @@ int trace_chown(const struct trace_chown_args *args) {
 }
 
 SEC("fentry/security_path_chroot")
-int BPF_PROG(trace_chroot, const struct path *path) {
+int BPF_PROG(trace_chroot, struct path *path) {
     if (path && is_traced()) {
         register_path_event("fentry/security_path_chroot", path, MAY_EXEC);
     }

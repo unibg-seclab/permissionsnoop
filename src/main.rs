@@ -109,9 +109,11 @@ fn main() -> Result<()> {
     }
 
     // Print aggregated path permissions
-    // TODO: Sort results by path
     if let Some(path_permissions) = unsafe { PATH_PERMISSIONS.get(0) } {
-        for (path, encoded_permission) in path_permissions {
+        // Sort results by path
+        let mut items = Vec::from_iter(path_permissions.iter());
+        items.sort();
+        for (path, encoded_permission) in items {
             let permission = get_permission_string(*encoded_permission);
             println!("{},{}", path, permission);
         }

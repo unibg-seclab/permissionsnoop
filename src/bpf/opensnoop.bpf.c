@@ -367,22 +367,22 @@ int BPF_PROG(trace_set_fowner, struct file *file) {
     return 0;
 }
 
-/*
- * Tarce truncate operations, i.e. using ftruncate.
- *
- * The LSM hook was introduced in recent versions of the kernel, so you might
- * not have it available (even with our kernel changes)
- */
-SEC("fentry/security_file_truncate")
-int BPF_PROG(trace_file_truncate, struct file *file) {
-    if (file && is_traced()) {
-        u8 permission = mode_to_permission(file->f_mode);
-        register_path_event("fentry/security_file_truncate", &file->f_path,
-                            permission);
-    }
+// /*
+//  * Tarce truncate operations, i.e. using ftruncate.
+//  *
+//  * The LSM hook was introduced in recent versions of the kernel, so we do not
+//  * it available even with our kernel changes yet
+//  */
+// SEC("fentry/security_file_truncate")
+// int BPF_PROG(trace_file_truncate, struct file *file) {
+//     if (file && is_traced()) {
+//         u8 permission = mode_to_permission(file->f_mode);
+//         register_path_event("fentry/security_file_truncate", &file->f_path,
+//                             permission);
+//     }
 
-    return 0;
-}
+//     return 0;
+// }
 
 SEC("fentry/security_path_mknod")
 int BPF_PROG(trace_mknod, struct path *dir, struct dentry *dentry,

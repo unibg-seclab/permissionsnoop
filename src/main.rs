@@ -23,6 +23,8 @@ const MAY_READ: u8 = 0x00000004;
 
 const SRC_SIZE: usize = 32;
 
+static mut PATH_PERMISSIONS: Vec<HashMap<&str, u8>> = vec![];
+
 #[derive(Parser)]
 struct Args {
     // TODO: Print events as they come or aggregate them
@@ -88,10 +90,7 @@ fn get_permission_string(encoded_permission: u8) -> String {
     permission
 }
 
-fn event_handler(
-    data: &[u8],
-    opt_path_permissions: Option<&mut HashMap<&str, u8>>
-) -> i32 {
+fn event_handler(data: &[u8]) -> i32 {
     if data.len() != mem::size_of::<PathEvent>() {
         eprintln!(
             "Invalid size {} != {}",
@@ -111,7 +110,7 @@ fn event_handler(
     // Patch double printing issue
     let path = &wrong_path[..event.path_len as usize];
 
-    match opt_path_permissions {
+    match unsafe { &mut PATH_PERMISSIONS.get_mut(0) } {
         Some(path_permissions) => {
             match path_permissions.get(path) {
                 Some(permission) => {
@@ -148,75 +147,63 @@ fn main() -> Result<()> {
     // Load BPF programs
     let mut skel = OpensnoopSkelBuilder::default().open()?.load()?;
 
-    // Initialize data structure to aggregate path permissions
-    let mut path_permissions: HashMap<&str, u8> = HashMap::new();
+    if args.aggregate {
+        // Initialize data structure to aggregate path permissions
+        unsafe { PATH_PERMISSIONS.push(HashMap::new()); }
+    }
 
     // Add ring buffer and associated callback
     let mut builder = libbpf_rs::RingBufferBuilder::new();
     builder
         .add(
             skel.maps().events(),
-            | data | {
-                event_handler(
-                    data,
-                    match args.aggregate {
-                        true => Some(&mut path_permissions),
-                        false => None,
-                    }
-                )
-            }
+            move | data | { event_handler(data) }
         )?;
 
-    {
-        /* This code block ensure the ring_buffer is destroyed before we access
-        the path_permissions hash map in immutable way, thus preventing
-        concurrent memory modification leading to memory errors */
+    let ring_buffer = builder.build()?;
 
-        let ring_buffer = builder.build()?;
+    // Attach BPF programs
+    skel.attach()?;
 
-        // Attach BPF programs
-        skel.attach()?;
+    // Drop permitted capabilities
+    caps::clear(None, caps::CapSet::Permitted)?;
 
-        // Drop permitted capabilities
-        caps::clear(None, caps::CapSet::Permitted)?;
+    // Define tracing closure
+    let enable_tracing = move || {
+        attach_tracer();
+        Ok(())
+    };
 
-        // Define tracing closure
-        let enable_tracing = move || {
-            attach_tracer();
-            Ok(())
-        };
-
-        // Print header
-        match args.aggregate {
-            true => println!("Path,Permission"),
-            false => println!("Source,Path,Permission"),
-        }
-
-        // Run command to trace
-        let program = &args.command[0];
-        let arguments = &args.command[1..];
-        let mut child;
-        unsafe {
-            // TODO: Redirect output and error to somewhere depending on user
-            // decision
-            child = Command::new(program)
-                .args(arguments)
-                .pre_exec(enable_tracing)
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn()?;
-        }
-
-        // Listen for events while waiting for the child process to exit
-        while child.try_wait()?.is_none() {
-            // Use reasonable duration to avoid busy waiting
-            ring_buffer.poll(core::time::Duration::from_millis(5))?;
-        }
+    // Print header
+    match args.aggregate {
+        true => println!("Path,Permission"),
+        false => println!("Source,Path,Permission"),
     }
 
-    if args.aggregate {
+    // Run command to trace
+    let program = &args.command[0];
+    let arguments = &args.command[1..];
+    let mut child;
+    unsafe {
+        // TODO: Redirect output and error to somewhere depending on user
+        // decision
+        child = Command::new(program)
+            .args(arguments)
+            .pre_exec(enable_tracing)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()?;
+    }
+
+    // Listen for events while waiting for the child process to exit
+    while child.try_wait()?.is_none() {
+        // Use reasonable duration to avoid busy waiting
+        ring_buffer.poll(core::time::Duration::from_millis(5))?;
+    }
+
+    if let Some(path_permissions) = unsafe { PATH_PERMISSIONS.get(0) } {
         for (path, encoded_permission) in path_permissions {
-            let permission = get_permission_string(encoded_permission);
+            let permission = get_permission_string(*encoded_permission);
             println!("{},{}", path, permission);
         }
     }

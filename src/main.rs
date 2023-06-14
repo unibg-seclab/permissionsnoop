@@ -96,7 +96,7 @@ fn event_handler(data: &[u8]) -> i32 {
     permission.push(if event.permission & MAY_EXEC != 0 { 'x' } else { '-' });
 
     // Patch double printing issue
-    println!("{}: {} {}", src, &path[..event.path_len as usize], permission);
+    println!("{},{},{}", src, &path[..event.path_len as usize], permission);
 
     return 0;
 }
@@ -137,6 +137,9 @@ fn main() -> Result<()> {
         attach_tracer();
         Ok(())
     };
+
+    // Print header before running the command
+    println!("Hook,Path,Permission");
 
     // Run command to trace
     let program = &args.command[0];

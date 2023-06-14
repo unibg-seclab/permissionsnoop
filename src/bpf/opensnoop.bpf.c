@@ -180,21 +180,6 @@ void register_path_event(char *src, struct path *path, u8 permission) {
 	bpf_ringbuf_submit(event, 0);
 }
 
-/*
- * Trace file permissions before accessing an open file. Notice that this hook
- * is used when the actual read/write operations are performed.
-*/
-SEC("fentry/security_file_permission")
-int BPF_PROG(trace_file_permission, struct file *file, int mask) {
-    if (file && is_traced()) {
-        u8 permission = mode_to_permission(file->f_mode);
-        register_path_event("fentry/security_file_permission", &file->f_path,
-                            permission);
-    }
-
-    return 0;
-}
-
 SEC("fentry/security_inode_getattr")
 int BPF_PROG(trace_inode_getattr, struct path *path) {
     if (is_traced()) {
@@ -278,24 +263,6 @@ int BPF_PROG(trace_mmap, struct file *file, unsigned long prot,
  * NOTE: The following hooks require patching the kernel by extending
  * btf_allowlist_d_path and sleepable_lsm_hooks
 */
-
-/*
- * Trace kenrel read of a file specified by userspace
- *
- * lsm/kernel_read_file belongs to sleepable_lsm_hooks, but it has been recently
- * added, so we still do not not have it available without kernel changes
-*/
-SEC("lsm/kernel_read_file")
-int BPF_PROG(trace_kernel_read_file, struct file *file,
-             enum kernel_read_file_id id, bool contents) {
-    if (file && is_traced()) {
-        u8 permission = mode_to_permission(file->f_mode);
-        register_path_event("fentry/security_file_permission", &file->f_path,
-                            permission);
-    }
-
-    return 0;
-}
 
 SEC("fentry/security_file_fcntl")
 int BPF_PROG(trace_fcntl, struct file *file, unsigned int cmd,

@@ -27,6 +27,9 @@
 // include/uapi/linux/limits.h
 #define PATH_MAX    4096    /* # chars in a path name including nul */
 
+// linux/include/linux/mm.h
+#define VM_SHARED   0x00000008
+
 // include/uapi/linux/mman.h
 #define MAP_PRIVATE 0x02    /* changes are private */
 
@@ -117,9 +120,6 @@ void BPF_PROG(delete_trace_on_exit, struct task_struct *child) {
 
 /* TRACING */
 
-// TODO: Keep track of creation and removal events using other hooks
-// TODO: Trace mprotect to capture changes in memory mapping protection
-
 bool is_traced() {
     struct task_struct *task = bpf_get_current_task_btf();
     u8 *is_traced = (u8 *) bpf_task_storage_get(&tracee_map, task, 0, 0);
@@ -181,6 +181,21 @@ void register_path_event(char *src, struct path *path, u8 permission) {
     bpf_printk("%s: %s %u", src, event->path, event->permission);
 #endif /* DEBUG */
 	bpf_ringbuf_submit(event, 0);
+}
+
+/*
+ * Trace file permissions before accessing an open file. Notice that this hook
+ * is used when the actual read/write operations are performed.
+*/
+SEC("fentry/security_file_permission")
+int BPF_PROG(trace_file_permission, struct file *file, int mask) {
+    if (file && is_traced()) {
+        u8 permission = mode_to_permission(file->f_mode);
+        register_path_event("fentry/security_file_permission", &file->f_path,
+                            permission);
+    }
+
+    return 0;
 }
 
 SEC("fentry/security_inode_getattr")
@@ -257,6 +272,237 @@ int BPF_PROG(trace_mmap, struct file *file, unsigned long prot,
     if (file && is_traced()) {
         u8 permission = mmap_permission(prot, flags);
         register_path_event("lsm/mmap_file", &file->f_path, permission);
+    }
+
+    return 0;
+}
+
+/*
+ * NOTE: The following hooks require patching the kernel by extending
+ * btf_allowlist_d_path and sleepable_lsm_hooks
+*/
+
+/*
+ * Trace kenrel read of a file specified by userspace
+ *
+ * lsm/kernel_read_file belongs to sleepable_lsm_hooks, but it has been recently
+ * added, so we still do not not have it available without kernel changes
+*/
+SEC("lsm/kernel_read_file")
+int BPF_PROG(trace_kernel_read_file, struct file *file,
+             enum kernel_read_file_id id, bool contents) {
+    if (file && is_traced()) {
+        u8 permission = mode_to_permission(file->f_mode);
+        register_path_event("fentry/security_file_permission", &file->f_path,
+                            permission);
+    }
+
+    return 0;
+}
+
+SEC("fentry/security_file_fcntl")
+int BPF_PROG(trace_fcntl, struct file *file, unsigned int cmd,
+             unsigned long arg) {
+    if (file && is_traced()) {
+        u8 permission = mode_to_permission(file->f_mode);
+        register_path_event("fentry/security_file_fcntl", &file->f_path,
+                            permission);
+    }
+
+    return 0;
+}
+
+SEC("fentry/security_file_ioctl")
+int BPF_PROG(trace_ioctl, struct file *file, unsigned int cmd,
+             unsigned long arg) {
+    if (file && is_traced()) {
+        u8 permission = mode_to_permission(file->f_mode);
+        register_path_event("fentry/security_file_ioctl", &file->f_path,
+                            permission);
+    }
+
+    return 0;
+}
+
+SEC("fentry/security_file_lock")
+int BPF_PROG(trace_lock, struct file *file, unsigned int cmd) {
+    if (file && is_traced()) {
+        u8 permission = mode_to_permission(file->f_mode);
+        register_path_event("fentry/security_file_lock", &file->f_path,
+                            permission);
+    }
+
+    return 0;
+}
+
+SEC("fentry/security_file_mprotect")
+int BPF_PROG(trace_mprotect, struct vm_area_struct *vma, unsigned long reqprot,
+			 unsigned long prot) {
+    if (vma && is_traced()) {
+        unsigned long flags = !(vma->vm_flags & VM_SHARED) ? MAP_PRIVATE : 0;
+        u8 permission = mmap_permission(prot, flags);
+        register_path_event("fentry/security_file_mprotect",
+                            &vma->vm_file->f_path, permission);
+    }
+
+    return 0;
+}
+
+SEC("fentry/security_file_receive")
+int BPF_PROG(trace_receive, struct file *file) {
+    if (file && is_traced()) {
+        u8 permission = mode_to_permission(file->f_mode);
+        register_path_event("fentry/security_file_receive", &file->f_path,
+                            permission);
+    }
+
+    return 0;
+}
+
+SEC("fentry/security_file_set_fowner")
+int BPF_PROG(trace_set_fowner, struct file *file) {
+    if (file && is_traced()) {
+        u8 permission = mode_to_permission(file->f_mode);
+        register_path_event("fentry/security_file_set_fowner", &file->f_path,
+                            permission);
+    }
+
+    return 0;
+}
+
+/*
+ * Tarce truncate operations, i.e. using ftruncate.
+ *
+ * The LSM hook was introduced in recent versions of the kernel, so you might
+ * not have it available (even with our kernel changes)
+ */
+SEC("fentry/security_file_truncate")
+int BPF_PROG(trace_receive, struct file *file) {
+    if (file && is_traced()) {
+        u8 permission = mode_to_permission(file->f_mode);
+        register_path_event("fentry/security_file_truncate", &file->f_path,
+                            permission);
+    }
+
+    return 0;
+}
+
+SEC("fentry/security_path_mknod")
+int BPF_PROG(trace_mknod, const struct path *dir, struct dentry *dentry,
+             umode_t mode, unsigned int dev) {
+    if (dir && is_traced()) {
+        register_path_event("fentry/security_path_mknod", dir,
+                            MAY_WRITE | MAY_EXEC);
+    }
+
+    return 0;
+}
+
+SEC("fentry/security_path_mkdir")
+int BPF_PROG(trace_mkdir, const struct path *dir, struct dentry *dentry,
+             umode_t mode) {
+    if (dir && is_traced()) {
+        register_path_event("fentry/security_path_mkdir", dir,
+                            MAY_WRITE | MAY_EXEC);
+    }
+
+    return 0;
+}
+
+SEC("fentry/security_path_rmdir")
+int BPF_PROG(trace_rmdir, const struct path *dir, struct dentry *dentry) {
+    if (dir && is_traced()) {
+        register_path_event("fentry/security_path_rmdir", dir,
+                            MAY_WRITE | MAY_EXEC);
+    }
+
+    return 0;
+}
+
+SEC("fentry/security_path_unlink")
+int BPF_PROG(trace_unlink, const struct path *dir, struct dentry *dentry) {
+    if (dir && is_traced()) {
+        register_path_event("fentry/security_path_unlink", dir,
+                            MAY_WRITE | MAY_EXEC);
+    }
+
+    return 0;
+}
+
+SEC("fentry/security_path_symlink")
+int BPF_PROG(trace_symlink, const struct path *dir, struct dentry *dentry,
+			 const char *old_name) {
+    if (dir && is_traced()) {
+        register_path_event("fentry/security_path_symlink", dir,
+                            MAY_WRITE | MAY_EXEC);
+    }
+
+    return 0;
+}
+
+SEC("fentry/security_path_link")
+int BPF_PROG(trace_link, struct dentry *old_dentry,
+             const struct path *new_dir, struct dentry *new_dentry) {
+    if (new_dir && is_traced()) {
+        register_path_event("fentry/security_path_link", new_dir,
+                            MAY_WRITE | MAY_EXEC);
+    }
+
+    return 0;
+}
+
+SEC("fentry/security_path_rename")
+int BPF_PROG(trace_rename, const struct path *old_dir,
+             struct dentry *old_dentry, const struct path *new_dir,
+             struct dentry *new_dentry, unsigned int flags) {
+    if (new_dir && is_traced()) {
+        register_path_event("fentry/security_path_rename", old_dir,
+                            MAY_WRITE | MAY_EXEC);
+        register_path_event("fentry/security_path_rename", new_dir,
+                            MAY_WRITE | MAY_EXEC);
+    }
+
+    return 0;
+}
+
+SEC("fentry/security_path_truncate")
+int BPF_PROG(trace_truncate, const struct path *path) {
+    if (path && is_traced()) {
+        register_path_event("fentry/security_path_truncate", path, MAY_WRITE);
+    }
+
+    return 0;
+}
+
+SEC("fentry/security_path_chmod")
+int BPF_PROG(trace_chmod, const struct path *path, umode_t mode) {
+    if (path && is_traced()) {
+        register_path_event("fentry/security_path_chmod", path, MAY_WRITE);
+    }
+
+    return 0;
+}
+
+struct trace_chown_args {
+    const struct path *path;
+    kuid_t uid;
+    kgid_t gid;
+};
+
+SEC("fentry/security_path_chown")
+int trace_chown(const struct trace_chown_args *args) {
+    if (args && args->path && is_traced()) {
+        register_path_event("fentry/security_path_chown", args->path,
+                            MAY_WRITE);
+    }
+
+    return 0;
+}
+
+SEC("fentry/security_path_chroot")
+int BPF_PROG(trace_chroot, const struct path *path) {
+    if (path && is_traced()) {
+        register_path_event("fentry/security_path_chroot", path, MAY_EXEC);
     }
 
     return 0;

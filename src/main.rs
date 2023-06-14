@@ -125,7 +125,7 @@ fn main() -> Result<()> {
             move | data | { event_handler(data) }
         )?;
     let ring_buffer = builder.build()?;
-   
+
     // Attach BPF programs
     skel.attach()?;
 

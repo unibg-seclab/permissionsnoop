@@ -4,9 +4,9 @@ use std::{io::BufRead, io::BufReader};
 use anyhow::{anyhow, Result};
 use libbpf_rs::RingBuffer;
 
-#[path = "bpf/.output/opensnoop.skel.rs"]
-pub mod opensnoop;
-use opensnoop::*;
+#[path = "bpf/.output/permissionsnoop.skel.rs"]
+pub mod permissionsnoop;
+use permissionsnoop::*;
 
 pub fn is_lsm_bpf_available() -> Result<bool> {
     let lsm = fs::File::open("/sys/kernel/security/lsm")?;
@@ -34,7 +34,7 @@ pub fn has_necessary_capabilities() -> Result<bool> {
 
 pub fn load_bpf_programs_and_maps(
     event_handler: fn(&[u8]
-) -> i32) -> Result<(OpensnoopSkel<'static>, RingBuffer<'static>)> {
+) -> i32) -> Result<(PermissionsnoopSkel<'static>, RingBuffer<'static>)> {
     // Check availability of lsm bpf
     if !is_lsm_bpf_available()? {
         return Err(anyhow!("No LSM BPF support available"));
@@ -46,7 +46,7 @@ pub fn load_bpf_programs_and_maps(
     }
 
     // Load BPF programs
-    let mut skel = OpensnoopSkelBuilder::default().open()?.load()?;
+    let mut skel = PermissionsnoopSkelBuilder::default().open()?.load()?;
 
     // Add ring buffer and associated callback
     let mut builder = libbpf_rs::RingBufferBuilder::new();

@@ -1,1 +1,1 @@
-# opensnoop
+# permissionsnoop

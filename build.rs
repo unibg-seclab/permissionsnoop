@@ -25,7 +25,7 @@ fn generate_kernel_defs() -> Result<(), Box<dyn std::error::Error>> {
   Ok(())
 }
 
-const SRC: &str = "./src/bpf/opensnoop.bpf.c";
+const SRC: &str = "./src/bpf/permissionsnoop.bpf.c";
 
 fn generate_skeleton() -> Result<(), Box<dyn std::error::Error>> {
   let build_profile = env::var("PROFILE")?;
@@ -46,7 +46,7 @@ fn generate_skeleton() -> Result<(), Box<dyn std::error::Error>> {
   SkeletonBuilder::new()
     .clang_args(arg)
     .source(SRC)
-    .build_and_generate("./src/bpf/.output/opensnoop.skel.rs")?;
+    .build_and_generate("./src/bpf/.output/permissionsnoop.skel.rs")?;
   println!("cargo:rerun-if-changed={}", SRC);
   Ok(())
 }

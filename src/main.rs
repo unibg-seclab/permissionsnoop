@@ -15,15 +15,19 @@ use utils::{get_event, get_permission_string};
 static mut PATH_PERMISSIONS: Vec<HashMap<&str, u8>> = vec![];
 
 #[derive(Parser)]
+#[command(
+    about = "Security observability tool to trace filesystem-related events",
+    long_about = None
+)]
 struct Args {
-    #[clap(
-        short('a'),
-        long("--aggregate"),
-        help("Print aggregate permission on exit. Otherwise, print events as \
-                they come with only the current permission")
+    #[arg(
+        short,
+        long,
+        default_value_t = false,
+        help = "Print aggregate permission on exit"
     )]
     aggregate: bool,
-    #[clap(required(true), help("Command run inside the sandbox."))]
+    #[arg(required = true, help = "Command to trace")]
     command: Vec<String>,
 }
 

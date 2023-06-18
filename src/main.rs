@@ -64,7 +64,7 @@ fn event_handler(data: &[u8]) -> i32 {
         None => {
             // Print path event
             let permission = get_permission_string(curr_permission);
-            println!("{},{},{}", src, path, permission);
+            println!("{},\"{}\",{}", src, path, permission);
         }
     }
 
@@ -119,7 +119,7 @@ fn main() -> Result<()> {
         items.sort();
         for (path, encoded_permission) in items {
             let permission = get_permission_string(*encoded_permission);
-            println!("{},{}", path, permission);
+            println!("\"{}\",{}", path, permission);
         }
     }
 

@@ -27,6 +27,7 @@ Specifically, we changed:
   BTF_ID(func, security_file_fcntl)
   BTF_ID(func, security_file_ioctl)
   BTF_ID(func, security_file_lock)
+  BTF_ID(func, security_file_mprotect)
   BTF_ID(func, security_file_set_fowner)
   BTF_ID(func, security_file_receive)
   BTF_ID(func, security_file_truncate)

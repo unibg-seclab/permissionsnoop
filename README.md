@@ -8,7 +8,7 @@ and record filesystem-related events.
 - bpftool 7.0.0
 - Cargo 1.69.0
 - Clang 14.0.0
-- Linux kernel 5.15.117+ (see section below)
+- Tested with kernel 6.4 (see section below)
 - rustc 1.69.0
 
 ### NOTE
@@ -64,33 +64,16 @@ Specifically, we changed:
   BTF_ID(func, bpf_lsm_path_unlink)
   ```
 
-## Installation
+## Quickstart
 
-- Clone this repository
-- Enter the repository directory
 - Install [prerequisites](#prerequisites)
 - Compile the utility from source
 
   ```sh
-  cargo build --release
+	make
   ```
 
-- Add binary to your $PATH environment variable, and give it the capability to
-  load eBPF programs
-
-  ```sh
-  sudo cp target/release/permissionsnoop /usr/local/bin
-  sudo setcap =ep /usr/local/bin
-  ```
-
-- [Optional] Allow it to load eBPF programs
-
-  ```sh
-  sudo setcap =ep /usr/local/bin
-  ```
-
-- Run the command (depending on the previous optional step, you may need to run
-  it with sudo)
+- Run the command to as an example
 
   ```sh
   permissionsnoop -- ls -l

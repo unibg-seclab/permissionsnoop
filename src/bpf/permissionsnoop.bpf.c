@@ -447,12 +447,12 @@ int BPF_PROG(trace_chmod, struct path *path, umode_t mode) {
     return 0;
 }
 
+// see https://lore.kernel.org/all/20220812052435.523068-1-yhs@fb.com/T/
 struct trace_chown_args {
     struct path *path;
     kuid_t uid;
     kgid_t gid;
 };
-
 SEC("fentry/security_path_chown")
 int trace_chown(struct trace_chown_args *args) {
     if (args && args->path && is_traced()) {

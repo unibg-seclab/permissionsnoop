@@ -35,20 +35,23 @@
 char LICENSE[] SEC("license") = "Dual MIT/GPL";
 u8 TRUE = true;
 
+// DEBUG
+#define DEBUG = 1;
+
 /* STRUCTS */
 
 struct path_event {
+    u8 permission;
+    unsigned int path_len;
     char src[SRC_MAX];
     char path[PATH_MAX];
-    unsigned int path_len;
-    u8 permission;
 };
 
 /* MAPS */
 
 struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
-	__uint(max_entries, 256 * 1024);    // 256 KB
+	__uint(max_entries, 256 * 1024);    // 512 KB
 } events SEC(".maps");
 
 struct {
@@ -64,6 +67,13 @@ struct {
     __type(key, int);
     __type(value, u8);
 } tracee_map SEC(".maps");
+
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(key_size,  sizeof(int));
+	__uint(value_size, sizeof(u8));
+	__uint(max_entries, 64);
+} tid_map SEC(".maps");
 
 /* ATTACHMENT */
 
@@ -119,8 +129,25 @@ void BPF_PROG(delete_trace_on_exit, struct task_struct *child) {
 
 bool is_traced() {
     struct task_struct *task = bpf_get_current_task_btf();
+    // check the current task is traced
     u8 *is_traced = (u8 *) bpf_task_storage_get(&tracee_map, task, 0, 0);
-    return is_traced != NULL;
+    if (is_traced != NULL) {
+	    return true;
+    }
+    int pid = task->pid;
+    // check whether the user has attached a policy to a process
+    // without using the auto-attach function
+    int * res = bpf_map_lookup_elem(&tid_map, &pid);
+    if (res != NULL){
+#ifdef DEBUG	    
+	    bpf_printk("Pid %d listed", pid);
+#endif
+	    // start tracing the the current task
+	    bpf_task_storage_get(&tracee_map, task, &TRUE, BPF_LOCAL_STORAGE_GET_F_CREATE);
+	    return true;
+    }
+
+    return false;
 }
 
 u8 mode_to_permission(fmode_t mode) {
@@ -176,6 +203,7 @@ void register_path_event(char *src, struct path *path, u8 permission) {
     event->permission = permission;
 #ifdef DEBUG
     bpf_printk("%s: %s %u", src, event->path, event->permission);
+    bpf_printk("%lu", event->path_len);    
 #endif /* DEBUG */
 	bpf_ringbuf_submit(event, 0);
 }

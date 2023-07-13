@@ -14,3 +14,4 @@ caps = "0.5.5"
 clap = { version = "4.3.4", features = ["derive"] }
 criterion = "0.5.1"
 libbpf-rs = "0.20.1"
+libc = "0.2.134"

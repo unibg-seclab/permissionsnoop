@@ -1,7 +1,8 @@
 # permissionsnoop
 
-A security observability tool with minimal performance footprint to identify
-and record filesystem-related events.
+An eBPF-based security observability tool with minimal performance
+footprint to identify and record filesystem-related events generated
+by processes or commands.
 
 ## Prerequisites
 
@@ -84,10 +85,12 @@ Specifically, we changed:
 Security observability tool to trace filesystem-related events
 
 ```usage
-Usage: permissionsnoop [OPTIONS] <COMMAND>...
+eBPF-based security observability tool to trace filesystem-related events
+
+Usage: permissionsnoop [OPTIONS] <COMPONENT>...
 
 Arguments:
-  <COMMAND>...  Command to trace
+  <COMPONENT>...  A command or a sequence of space-separated thread identifiers
 
 Options:
   -a, --aggregate  Print aggregate permission on exit

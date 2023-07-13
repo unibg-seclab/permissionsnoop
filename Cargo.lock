@@ -653,6 +653,7 @@ dependencies = [
  "criterion",
  "libbpf-cargo",
  "libbpf-rs",
+ "libc",
 ]
 
 [[package]]

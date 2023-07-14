@@ -5,7 +5,14 @@ CFLAGS = -std=c17
 PROBE = permissionsnoop-probe
 TARGET_DIR = /usr/local/bin
 
+LICENSE_TYPE   := "mit"
+LICENSE_HOLDER := "Unibg Seclab (https://seclab.unibg.it)"
+
 all: build
+
+addlicense:
+	go install github.com/google/addlicense@latest
+	$(shell go env GOPATH)/bin/addlicense -c $(LICENSE_HOLDER) -l $(LICENSE_TYPE) .
 
 ${PROBE}: $(PROBE).c
 

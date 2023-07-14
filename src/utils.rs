@@ -37,7 +37,7 @@ pub fn get_event<'a>(data: &'a [u8]) -> Result<(&'static str, &'static str, u8)>
 
     let event = unsafe { &*(data.as_ptr() as *const PathEvent) };
 
-    println!("{}", event.path_len);
+    //    println!("{}", event.path_len);
     let src = read_event_str(&event.src).expect("Src should be UTF8");
     let path = read_event_str(&event.path).expect("Path should be UTF8");
 

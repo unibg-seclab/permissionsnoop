@@ -156,9 +156,22 @@ fn main() -> Result<()> {
                 Err(_) => panic!("Component {:?} is not a valid thread identifier", pid),
             };
         }
-        // keep polling
+        // keep polling until user sends a stop command
+        let mut child;
+        // permissionsnoop-probe: inherits the the stdin associated
+        // with the default process, waiting until a string or a key
+        // is input
+        child = Command::new("permissionsnoop-probe")
+            .stdin(Stdio::inherit())
+            .spawn()?;
         loop {
+            // polling
             ring_buffer.poll(core::time::Duration::from_millis(5))?;
+            match child.try_wait() {
+                Ok(Some(_)) => break,
+                Ok(None) => continue,
+                Err(e) => println!("error attempting to wait: {e}"),
+            }
         }
     }
 

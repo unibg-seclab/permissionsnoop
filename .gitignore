@@ -5,3 +5,5 @@ target
 # emacs temp files
 *~
 #*
+
+permissionsnoop-probe.out

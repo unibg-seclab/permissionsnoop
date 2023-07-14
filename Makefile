@@ -18,4 +18,4 @@ build: ${PROBE}.out
 clean:
 	@cargo clean
 	rm -f $(PROBE).out
-	sudo rm -f $(PROBE).out /usr/local/bin/$(PROBE)
+	sudo rm -f $(PROBE).out /usr/local/bin/$(PROBE) /usr/local/bin/permissionsnoop

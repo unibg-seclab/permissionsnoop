@@ -91,8 +91,8 @@ Usage: permissionsnoop [OPTIONS] <COMPONENT>...
 
 Arguments:
   <COMPONENT>...  A command or a sequence of space-separated thread identifiers.
-	                             Tracing terminates when command exits, and when user inputs <ENTER>
-								 if thread identifiers are specified.
+  Tracing terminates when command exits, and when user inputs <ENTER>
+  if thread identifiers are specified.
 
 Options:
   -a, --aggregate  Print aggregate permission on exit

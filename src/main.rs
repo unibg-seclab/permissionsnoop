@@ -165,22 +165,16 @@ fn main() -> Result<()> {
             };
         }
         // Keep polling until user sends a stop command
-        let mut child;
         // Permissionsnoop-probe inherits the the stdin associated
         // with the current process, waiting until a string or a key
         // is input
-        child = Command::new("permissionsnoop-probe")
+        let mut child = Command::new("permissionsnoop-probe")
             .stdin(Stdio::inherit())
             .spawn()?;
-        loop {
+        // Non-blocking check of child exit status
+        while let None = child.try_wait()? {
             // Polling
             ring_buffer.poll(polling_interval)?;
-            // Non-blocking check of child exit status
-            match child.try_wait() {
-                Ok(Some(_)) => break,
-                Ok(None) => continue,
-                Err(e) => println!("error attempting to wait: {e}"),
-            }
         }
     }
 

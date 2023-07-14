@@ -1,21 +1,21 @@
-.PHONY: build clean
+.PHONY: build clean addlicense
 
 CC = clang
-STD = c17
+CFLAGS = -std=c17
 PROBE = permissionsnoop-probe
+TARGET_DIR = /usr/local/bin
 
 all: build
 
-${PROBE}.out:
-	$(CC) -std=$(STD) -o $(PROBE).out $(PROBE).c
+${PROBE}: $(PROBE).c
 
 build: ${PROBE}.out
 	cargo build --release
-	sudo cp target/release/permissionsnoop /usr/local/bin
-	sudo setcap =ep /usr/local/bin/permissionsnoop
-	sudo cp $(PROBE).out /usr/local/bin/$(PROBE)
+	sudo cp target/release/permissionsnoop $(TARGET_DIR)
+	sudo setcap =ep $(TARGET_DIR)/permissionsnoop
+	sudo cp $(PROBE) $(TARGET_DIR)/$(PROBE)
 
 clean:
 	@cargo clean
-	rm -f $(PROBE).out
-	sudo rm -f $(PROBE).out /usr/local/bin/$(PROBE) /usr/local/bin/permissionsnoop
+	rm -f $(PROBE)
+	sudo rm -f $(PROBE) $(TARGET_DIR)/$(PROBE) $(TARGET_DIR)/permissionsnoop

@@ -33,13 +33,15 @@ struct Args {
     aggregate: bool,
     #[arg(
         required = true,
-        help = "A command or a sequence of space-separated thread identifiers"
+        help = "A command or a sequence of space-separated thread identifiers. \
+		Tracing terminates when command exits, and when user inputs <ENTER> \
+		if thread identifiers are specified."
     )]
     component: Vec<String>,
 }
 
 /*
- * ProcessCommand uprobe attachment point
+ * Command uprobe attachment point
 */
 #[no_mangle]
 #[inline(never)]
@@ -84,6 +86,7 @@ fn event_handler(data: &[u8]) -> i32 {
 }
 
 fn main() -> Result<()> {
+    // Reading cmd line arguments
     let args = Args::parse();
 
     if args.aggregate {
@@ -93,6 +96,7 @@ fn main() -> Result<()> {
         }
     }
 
+    // Load eBPF components and register event handler
     let (mut skel, ring_buffer) = load_bpf_programs_and_maps(event_handler)?;
 
     // Print header
@@ -101,13 +105,18 @@ fn main() -> Result<()> {
         false => println!("Source,Path,Permission"),
     }
 
+    // Check whether command or sequence of pids must be traced
     let is_command: bool = match args.component[0].parse::<u32>() {
         Ok(_) => false,
         Err(_) => true,
     };
 
+    // Set polling interval, use reasonable duration to avoid busy waiting
+    let polling_interval = core::time::Duration::from_millis(5);
+
     if is_command {
-        // Closure to enable tracing of the component before its execution
+        // Command tracing, closure to enable tracing of the component
+        // before its execution
         let enable_tracing = move || {
             attach_tracer();
             Ok(())
@@ -116,7 +125,6 @@ fn main() -> Result<()> {
         // Run command to trace
         let program = &args.component[0];
         let arguments = &args.component[1..];
-
         let mut child;
         unsafe {
             child = Command::new(program)
@@ -126,15 +134,15 @@ fn main() -> Result<()> {
                 .stderr(Stdio::null())
                 .spawn()?;
         }
-        // Listen for events while waiting for the child process to exit
+        // Poll events while waiting for the child process to exit
         while child.try_wait()?.is_none() {
-            // Use reasonable duration to avoid busy waiting
-            ring_buffer.poll(core::time::Duration::from_millis(5))?;
+            ring_buffer.poll(polling_interval)?;
         }
     } else {
-        // Retrive the thread identifier eBPF map
+        // Pid tracing
+        // Retrieve identifier eBPF map of traced threads
         let tid_map_fd = skel.maps_mut().tid_map().fd();
-        // lookup hit placeholder
+        // initialize map lookup placeholder (for value)
         let t_hit: u8 = 1;
         let t_hit_ptr: *const c_void = ref_to_voidp(&t_hit);
 
@@ -143,11 +151,11 @@ fn main() -> Result<()> {
         for pid in components_i {
             match pid.parse::<u32>() {
                 Ok(pidv) => {
-                    println!("Attaching policy to thread {:?}", pidv);
+                    //println!("Attaching policy to thread {:?}", pidv);
                     unsafe {
-                        let t_entry_ptr: *const c_void = ref_to_voidp(&pidv);
+                        let t_key_ptr: *const c_void = ref_to_voidp(&pidv);
                         let err =
-                            bpf_map_update_elem(tid_map_fd, t_entry_ptr, t_hit_ptr, BPF_ANY as u64);
+                            bpf_map_update_elem(tid_map_fd, t_key_ptr, t_hit_ptr, BPF_ANY as u64);
                         if err != 0 {
                             panic!("Failed insertion in host_map {:?}", err);
                         }
@@ -156,17 +164,18 @@ fn main() -> Result<()> {
                 Err(_) => panic!("Component {:?} is not a valid thread identifier", pid),
             };
         }
-        // keep polling until user sends a stop command
+        // Keep polling until user sends a stop command
         let mut child;
-        // permissionsnoop-probe: inherits the the stdin associated
-        // with the default process, waiting until a string or a key
+        // Permissionsnoop-probe inherits the the stdin associated
+        // with the current process, waiting until a string or a key
         // is input
         child = Command::new("permissionsnoop-probe")
             .stdin(Stdio::inherit())
             .spawn()?;
         loop {
-            // polling
-            ring_buffer.poll(core::time::Duration::from_millis(5))?;
+            // Polling
+            ring_buffer.poll(polling_interval)?;
+            // Non-blocking check of child exit status
             match child.try_wait() {
                 Ok(Some(_)) => break,
                 Ok(None) => continue,
@@ -175,7 +184,7 @@ fn main() -> Result<()> {
         }
     }
 
-    // Print aggregated path permissions
+    // Print aggregated path permissions to stdout
     if let Some(path_permissions) = unsafe { PATH_PERMISSIONS.get(0) } {
         // Sort results by path
         let mut items = Vec::from_iter(path_permissions.iter());

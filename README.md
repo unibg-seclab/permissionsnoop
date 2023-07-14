@@ -90,7 +90,9 @@ eBPF-based security observability tool to trace filesystem-related events
 Usage: permissionsnoop [OPTIONS] <COMPONENT>...
 
 Arguments:
-  <COMPONENT>...  A command or a sequence of space-separated thread identifiers
+  <COMPONENT>...  A command or a sequence of space-separated thread identifiers.
+	                             Tracing terminates when command exits, and when user inputs <ENTER>
+								 if thread identifiers are specified.
 
 Options:
   -a, --aggregate  Print aggregate permission on exit

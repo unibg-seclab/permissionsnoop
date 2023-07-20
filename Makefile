@@ -16,7 +16,7 @@ addlicense:
 
 ${PROBE}: $(PROBE).c
 
-build: ${PROBE}.out
+build: ${PROBE}
 	cargo build --release
 	sudo cp target/release/permissionsnoop $(TARGET_DIR)
 	sudo setcap =ep $(TARGET_DIR)/permissionsnoop

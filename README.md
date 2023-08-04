@@ -1,8 +1,8 @@
 # permissionsnoop
 
 An eBPF-based security observability tool with minimal performance
-footprint to identify and record filesystem-related events generated
-by processes or commands.
+footprint to identify and record file system-related events generated
+by application and processes.
 
 ## Prerequisites
 
@@ -14,11 +14,12 @@ by processes or commands.
 
 ### NOTE
 
-The utility expects to attach eBPF programs to LSM hooks in order to capture
-filesystem-related security events. As such, the Linux kernel should have eBPF
-LSM enabled. Moreover, in order to capture the full path of the files involved
-in the events a few small changes to the kernel are required to make the
-`bpf_d_path` helper available to all the hooks we need.
+The utility expects to attach eBPF programs to LSM hooks in order to
+capture file system-related security events. As such, the Linux kernel
+should have eBPF LSM enabled. Moreover, in order to capture the full
+path of the files involved in the events a few small changes to the
+kernel are required to make the `bpf_d_path` helper available to all
+the hooks we need.
 
 Specifically, we changed:
 
@@ -74,18 +75,25 @@ Specifically, we changed:
 	make
   ```
 
-- Run the command to as an example
+- Example 1, trace the `ls` program
 
   ```sh
   permissionsnoop -- ls -l
   ```
+  
+- Example 2, trace a process
+
+  ```sh
+  permissionsnoop -- ${PID}
+  ```
+  
 
 ## Usage
 
 Security observability tool to trace filesystem-related events
 
 ```usage
-eBPF-based security observability tool to trace filesystem-related events
+eBPF-based security observability tool to trace file system-related events
 
 Usage: permissionsnoop [OPTIONS] <COMPONENT>...
 

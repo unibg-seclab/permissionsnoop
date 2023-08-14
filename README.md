@@ -6,11 +6,11 @@ by application and processes.
 
 ## Prerequisites
 
-- bpftool 7.0.0
-- Cargo 1.69.0
-- Clang 14.0.0
 - Tested with kernel 6.4 (see section below)
-- rustc 1.69.0
+- bpftool 7.0.0
+- Clang 14.0.0
+- Cargo 1.71.1
+- rustc 1.71.1
 
 ### NOTE
 
